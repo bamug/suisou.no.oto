@@ -35,3 +35,17 @@ p {
     font-size: 1em;
     color: #666;
 }
+
+.visualizer-container {
+    position: relative;
+    width: 90%;
+    height: 70%;
+    background-color: #000;
+    border: 1px solid #333;
+}
+
+#visualizer {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
