@@ -1,27 +1,30 @@
 // 音声データを解析し、Canvas上にスペクトログラムを描画するためのロジック
 
-const canvas = document.getElementById('visualizer');
-const ctx = canvas.getContext('2d');
+const mainCanvas = document.getElementById('visualizer');
+const overlayCanvas = document.createElement('canvas');
+mainCanvas.parentNode.appendChild(overlayCanvas);
+const mainCtx = mainCanvas.getContext('2d');
+const overlayCtx = overlayCanvas.getContext('2d');
+
 let audioContext; // main.jsから設定される
 let sampleRate;   // main.jsから設定される
-let lastDrawTime = Date.now();
 const SCROLL_SPEED = 1; // スクロール速度（ピクセル/フレーム）
 
-// 初期化関数
-export function initVisualizer(context) {
-    audioContext = context;
-    sampleRate = context.sampleRate;
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    // 初期背景を黒で塗りつぶし
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-}
-
-// キャンバスのサイズを親要素に合わせる
+// キャンバスのサイズを設定
 function resizeCanvas() {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    const container = mainCanvas.parentNode;
+    mainCanvas.width = container.clientWidth;
+    mainCanvas.height = container.clientHeight;
+    overlayCanvas.width = container.clientWidth;
+    overlayCanvas.height = container.clientHeight;
+    
+    // オーバーレイキャンバスの位置を設定
+    overlayCanvas.style.position = 'absolute';
+    overlayCanvas.style.left = mainCanvas.offsetLeft + 'px';
+    overlayCanvas.style.top = mainCanvas.offsetTop + 'px';
+    
+    // 補助線を再描画
+    drawGridLines();
 }
 
 // 音量を色に変換 (0-255 -> 緑-黄-赤)
@@ -42,82 +45,52 @@ function getColor(value) {
 
 // スペクトログラムを描画
 export function drawVisualizer(frequencyData) {
-    // 現在のキャンバスの内容を左にスクロール
-    const imageData = ctx.getImageData(SCROLL_SPEED, 0, canvas.width - SCROLL_SPEED, canvas.height);
-    ctx.putImageData(imageData, 0, 0);
+    // メインキャンバスの内容を左にスクロール
+    const imageData = mainCtx.getImageData(SCROLL_SPEED, 0, mainCanvas.width - SCROLL_SPEED, mainCanvas.height);
+    mainCtx.putImageData(imageData, 0, 0);
     
-    // 新しいデータ列を右端に描画
+    // 新しいデータを右端に描画
     const binCount = frequencyData.length;
-    const barHeight = canvas.height / binCount;
+    const barHeight = mainCanvas.height / binCount;
     
     for (let i = 0; i < binCount; i++) {
         const value = frequencyData[i];
-        const y = canvas.height - ((i + 1) * barHeight);
-        
-        // 音量に基づいて色を設定
-        ctx.fillStyle = getColor(value);
-        
-        // 新しいデータを右端に描画
-        ctx.fillRect(canvas.width - SCROLL_SPEED, y, SCROLL_SPEED, barHeight);
+        const y = mainCanvas.height - ((i + 1) * barHeight);
+        mainCtx.fillStyle = getColor(value);
+        mainCtx.fillRect(mainCanvas.width - SCROLL_SPEED, y, SCROLL_SPEED, barHeight);
     }
-
-    // 補助線を描画
-    drawGridLines();
 }
 
-// 背景と周波数軸を描画
-function drawBackgroundAndAxis() {
-    // 背景を黒で塗りつぶし
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // 軸表示エリアの背景
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(canvas.width - 50, 0, 50, canvas.height);
-
-    ctx.fillStyle = 'white';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'left';
-
-    const maxFreq = sampleRate / 2;
-    // 表示したい周波数 (kHz)
-    const frequencies = [1, 2, 5, 10, 20]; 
-
-    frequencies.forEach(freqKHz => {
-        const freq = freqKHz * 1000;
-        if (freq <= maxFreq) {
-            const y = canvas.height - (freq / maxFreq) * canvas.height;
-            
-            // 補助線
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(canvas.width - 50, y); // 軸エリアの手前まで
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // ラベル
-            ctx.fillText(`${freqKHz}k`, canvas.width - 40, y + 4);
-        }
-    });
+// 初期化関数
+export function initVisualizer(context) {
+    audioContext = context;
+    sampleRate = context.sampleRate;
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // 初期背景を黒で塗りつぶし
+    mainCtx.fillStyle = 'black';
+    mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
 }
 
+// 補助線と周波数ラベルを描画
 function drawGridLines() {
-    // 周波数の補助線
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    
     const frequencies = [100, 500, 1000, 5000, 10000, 15000];
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.beginPath();
+    overlayCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    overlayCtx.beginPath();
     
     frequencies.forEach(freq => {
-        const y = canvas.height * (1 - (freq / (sampleRate / 2)));
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
+        const y = overlayCanvas.height * (1 - (freq / (sampleRate / 2)));
+        overlayCtx.moveTo(0, y);
+        overlayCtx.lineTo(overlayCanvas.width, y);
         
         // 周波数ラベル
-        ctx.fillStyle = 'white';
-        ctx.font = '10px Arial';
-        ctx.fillText(`${freq}Hz`, canvas.width - 45, y);
+        overlayCtx.fillStyle = 'white';
+        overlayCtx.font = '10px Arial';
+        overlayCtx.fillText(`${freq}Hz`, overlayCanvas.width - 45, y);
     });
     
-    ctx.stroke();
+    overlayCtx.stroke();
 }
