@@ -6,7 +6,7 @@ let audioContext; // main.jsから設定される
 let sampleRate;   // main.jsから設定される
 
 // 初期化関数
-function initVisualizer(context) {
+export function initVisualizer(context) {
     audioContext = context;
     sampleRate = context.sampleRate;
     resizeCanvas();
@@ -17,7 +17,8 @@ function initVisualizer(context) {
 function resizeCanvas() {
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
-    drawFrequencyAxis(); // リサイズ時に軸を再描画
+    // リサイズ時に背景と軸を再描画
+    drawBackgroundAndAxis();
 }
 
 // 音量を色に変換 (0-255 -> 緑-黄-赤)
@@ -29,64 +30,72 @@ function getColor(value) {
 }
 
 // スペクトログラムを描画
-function drawVisualizer(frequencyData) {
+export function drawVisualizer(frequencyData) {
     // 1. 現在のキャンバスの描画内容を1ピクセル左にずらす
-    const imageData = ctx.getImageData(1, 0, canvas.width - 1, canvas.height);
+    // 軸表示エリア(右側50px)はスクロールさせない
+    const imageData = ctx.getImageData(1, 0, canvas.width - 51, canvas.height);
     ctx.putImageData(imageData, 0, 0);
 
-    // 2. 右端に新しい周波数データを描画
+    // 2. 右端（軸の左隣）に新しい周波数データを描画
     const binCount = frequencyData.length;
+    const barWidth = 1;
+    const newColumnX = canvas.width - 51;
+
     for (let i = 0; i < binCount; i++) {
         const value = frequencyData[i];
         const color = getColor(value);
 
-        // 周波数軸を対数的にマッピングするとより音楽的に見やすいですが、まずは線形で実装
+        // 周波数帯域をキャンバスの高さにマッピング
         // y座標を反転させる (上が高周波)
         const y = canvas.height - (i / binCount) * canvas.height;
+        const barHeight = canvas.height / binCount;
         
         ctx.fillStyle = color;
-        ctx.fillRect(canvas.width - 1, y, 1, 1); // 1ピクセルの幅で描画
+        ctx.fillRect(newColumnX, y - barHeight, barWidth, barHeight);
     }
-
-    drawFrequencyAxis();
+    
+    // 現在時刻を示す線を再描画
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(newColumnX, 0);
+    ctx.lineTo(newColumnX, canvas.height);
+    ctx.stroke();
 }
 
-// 周波数軸の補助線とラベルを描画
-function drawFrequencyAxis() {
-    // 軸描画のために右端の100pxをクリア
-    ctx.clearRect(canvas.width - 100, 0, 100, canvas.height);
+// 背景と周波数軸を描画
+function drawBackgroundAndAxis() {
+    // 背景を黒で塗りつぶし
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 軸表示エリアの背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(canvas.width - 50, 0, 50, canvas.height);
 
     ctx.fillStyle = 'white';
     ctx.font = '12px Arial';
     ctx.textAlign = 'left';
 
     const maxFreq = sampleRate / 2;
-    const frequencies = [1000, 2000, 5000, 10000, 20000]; // 表示したい周波数
+    // 表示したい周波数 (kHz)
+    const frequencies = [1, 2, 5, 10, 20]; 
 
-    frequencies.forEach(freq => {
+    frequencies.forEach(freqKHz => {
+        const freq = freqKHz * 1000;
         if (freq <= maxFreq) {
             const y = canvas.height - (freq / maxFreq) * canvas.height;
             
             // 補助線
             ctx.beginPath();
             ctx.moveTo(0, y);
-            ctx.lineTo(canvas.width, y);
+            ctx.lineTo(canvas.width - 50, y); // 軸エリアの手前まで
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = 1;
             ctx.stroke();
 
             // ラベル
-            ctx.fillText(`${Math.round(freq / 1000)}k`, canvas.width - 40, y + 4);
+            ctx.fillText(`${freqKHz}k`, canvas.width - 40, y + 4);
         }
     });
-
-    // 現在時刻を示す線
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(canvas.width - 1, 0);
-    ctx.lineTo(canvas.width - 1, canvas.height);
-    ctx.stroke();
 }
-
-export { initVisualizer, drawVisualizer };
